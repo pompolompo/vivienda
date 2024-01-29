@@ -1,6 +1,7 @@
 library(sf)
 library(readxl)
 library(dplyr)
+library(stringr)
 
 # se modifican manualmente los nombres de las prvincias que no coinciden en .shp y .xls
 
@@ -8,6 +9,10 @@ library(dplyr)
 shp = read_sf("data/shapefile")
 shp = shp["Texto"] %>% rename(prov = Texto)
 shp = shp[-which(shp$prov %in% c("Ceuta", "Melilla")),]
+
+# población
+pob = read_xls("data/pob.xls", range = "A11:B62", col_names = c("prov", "pob")) %>%
+  mutate(prov = str_sub(prov, start = 4))
 
 # total de transacciones
 trans = read_xls("data/transac.xls", range = "B14:CC77")[, c(1, 74:77)]
@@ -32,4 +37,5 @@ parc = parc[which(parc$prov %in% shp$prov),]
 # join todos los datos
 shp = left_join(shp, trans, by = "prov") %>%
   left_join(., preu, by = "prov") %>%
-  left_join(., parc, by = "prov")
+  left_join(., parc, by = "prov") %>%
+  left_join(., pob, by = "prov")
