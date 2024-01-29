@@ -1,0 +1,76 @@
+---
+title: "Vivienda"
+author: "Ferran Garcia"
+date: "`r Sys.Date()`"
+output: 
+  bookdown::pdf_document2:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+# Resumen
+
+Un gran número de factores influyen en el precio de una vivienda: Tamaño, situación del mercado, localización... entre otros. ¿En qué medida está relacionado el precio de una vivienda con las la cantidad de tranacciones que ocurren y el uso que se les da a las mismas viviendas? Investigamos las relaciones que existen entre el parque de viviendas en términos de viviendas principales y no principales, las transacciones realizadadas y el precio medio según la provincia española. Por otra parte tratamos de agrupar las provincias de características similares.
+
+# Introducción
+
+Desde hace siglos en España han tenido lugar múltiples éxodos rurales en dirección a otras regiones. Dichos movimientos demográficos internos implican una mayor necesidad de alojar personas en núcleos ya de por sí muy poblados. Nos planteamos cuál es el estado actual de las provincias en cuanto a las viviendas. 
+
+Ponemos en práctica técnicas estadísticas con un efoque espacial para identificar relaciones entre provincias y agruparlas en clústers homogéneos. El estudio de la situación del mercado de la vivienda a nivel provincial servirá para conocer mejor los fenómenos económicos y demográficos relacionados con las viviendas y proporcionará información valiosa para los agentes de este mercado.
+
+Para llevar a cabo el análisis usaremos `R` y algunas de sus librerías que implementan algoritmos usados en *Ciencia de Datos Espacial*. A grandes rasgos, primero buscamos identificar autocorrelación con índices globales y locales para luego agrupar en clústers las provincias con características similares. En el apartado metodológico proporcionamos una explicación más detallada, así como la presentación de las variables que usamos.
+
+\newpage
+# Objetivos
+
+Este proyecto tiene dos objetivos pricipales: Por un lado el autor pretende familiarizarse con el área de estudio geográfico orientada a los datos y por otro conocer mejor la situación del mercado de viviendas a nivel provincial. A éstos objetivos del proyecto se le adhieren otros secundarios como servir de ejemplo o guión para consultas futuras sobre el tema o identificar qué provincias las viviendas cambian de mano con más frecuencia, a mayor precio o más pobladas en relación a la cantidad de viviendas. Los detallamos en la lista que sigue:
+
+- Familiarizarse con la *Ciencia de Datos Espacial*:
+  + Guión para el tratamiento de datos espaciales
+  + Guión para la representación de datos espaciales
+  + Guión para el uso de librerías de datos espaciales en `R`
+  + Guión para el análisis espacial exploratorio
+  
+- Conocer la coyuntura del mercado de viviendas a nivel provincial a través del análisis de autocorrelación espacial y la formación de clústers, responder a:
+  + ¿Qué provincias están más pobladas en relación al parque de viviendas disponibles?
+  + ¿Qué diferencias y similitudes hay en el uso^[Uso de de vivienda como residenia principal o secundaria.] de viviendas?
+  + ¿En qué provincias hay más transacciones de viviendas?
+  + ¿En qué provincias hay más ejecuciones hipotecarias?
+  + ¿Qué relaciones de cada variable existen entre provincias?
+  + ¿Se pueden clasificar o agrupar las viviendas? ¿Según qué criterio?
+
+Por otra parte comprobamos la veracidad de algunas hipótesis sobre el conjunto de datos:
+
+1. Las provincias de los alrededores de Madrid sin costa tienen menores precios y menos habitantes
+2. Las provincias de costa o turísticas tienen precios más elevados
+3. Las provincias más pobladas en relación su parque de viviendas transaccionan viviendas con mayor frecuencia
+
+\newpage
+# Metodología
+
+- ámbito de estudio (población)
+- variables a usar
+- fuentes de info
+- plan de trabajo, partido en fases:
+  + actividad concreta
+  + objetivo
+
+\newpage
+# Resultados
+
+\newpage
+# Bibligrafía
+
+- [Estimación del parque de viviendas](https://apps.fomento.gob.es/BoletinOnline2/?nivel=2&orden=33000000)
+- [Precios del suelo urbano y número de transacciones](https://apps.fomento.gob.es/BoletinOnline2/?nivel=2&orden=36000000)
+- [Shapefile de las provincias](https://www.arcgis.com/home/item.html?id=83d81d9336c745fd839465beab885ab7)
+
+- [Autocorrelación espacial global I](https://spatialanalysis.github.io/handsonspatialdata/global-spatial-autocorrelation-2.html#preliminaries-11)
+- [Autocorrelación espacial II](https://lanselin.github.io/introbook_vol1/CHglobalsa.html) 
+- [Autocorrelación espacial local](https://lanselin.github.io/introbook_vol1/CHLISA.html)
+
+- [rgeoda](https://geodacenter.github.io/rgeoda/)
