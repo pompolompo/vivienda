@@ -14,6 +14,10 @@ shp = shp[-which(shp$prov %in% c("Ceuta", "Melilla")),]
 pob = read_xls("data/pob.xls", range = "A11:B62", col_names = c("prov", "pob")) %>%
   mutate(prov = str_sub(prov, start = 4))
 
+# ejecuciones hipotecarias
+hipo = read_xls("data/hipo.xls", range = "A9:B62", col_names = c("prov", "hipo")) %>%
+  mutate(prov = str_sub(prov, start = 4))
+
 # total de transacciones
 trans = read_xls("data/transac.xls", range = "B14:CC77")[, c(1, 74:77)]
 trans[,2] = rowSums(trans[,2:5])
@@ -38,4 +42,13 @@ parc = parc[which(parc$prov %in% shp$prov),]
 shp = left_join(shp, trans, by = "prov") %>%
   left_join(., preu, by = "prov") %>%
   left_join(., parc, by = "prov") %>%
-  left_join(., pob, by = "prov")
+  left_join(., pob, by = "prov") %>%
+  left_join(., hipo, by = "prov")
+
+# dataframe con los datos no geográficos
+df = data.frame(shp) %>%
+  select(-geometry, -prov) %>%
+  mutate(prin = prin/1000,
+         pob = pob/1000,
+         nprin = nprin/1000)
+rownames(df) = shp$prov

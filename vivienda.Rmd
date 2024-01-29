@@ -8,7 +8,28 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, 
+                      fig.pos = "H", fig.align = 'center')
+```
+
+```{r}
+# manipulación de datos
+library(dplyr)
+library(sf)
+
+# tablas y gráficos
+library(corrplot)
+library(kableExtra)
+library(mapsf)
+
+# análisis espacial
+library(rgeoda)
+library(ape)
+```
+
+```{r}
+source("scripts/import.R")
+source("scripts/pinta_lisa.R")
 ```
 
 \newpage
@@ -24,7 +45,6 @@ Ponemos en práctica técnicas estadísticas con un efoque espacial para identif
 
 Para llevar a cabo el análisis usaremos `R` y algunas de sus librerías que implementan algoritmos usados en *Ciencia de Datos Espacial*. A grandes rasgos, primero buscamos identificar autocorrelación con índices globales y locales para luego agrupar en clústers las provincias con características similares. En el apartado metodológico proporcionamos una explicación más detallada, así como la presentación de las variables que usamos.
 
-\newpage
 # Objetivos
 
 Este proyecto tiene dos objetivos pricipales: Por un lado el autor pretende familiarizarse con el área de estudio geográfico orientada a los datos y por otro conocer mejor la situación del mercado de viviendas a nivel provincial. A éstos objetivos del proyecto se le adhieren otros secundarios como servir de ejemplo o guión para consultas futuras sobre el tema o identificar qué provincias las viviendas cambian de mano con más frecuencia, a mayor precio o más pobladas en relación a la cantidad de viviendas. Los detallamos en la lista que sigue:
@@ -49,18 +69,227 @@ Por otra parte comprobamos la veracidad de algunas hipótesis sobre el conjunto 
 2. Las provincias de costa o turísticas tienen precios más elevados
 3. Las provincias más pobladas en relación su parque de viviendas transaccionan viviendas con mayor frecuencia
 
-\newpage
 # Metodología
 
-- ámbito de estudio (población)
-- variables a usar
-- fuentes de info
-- plan de trabajo, partido en fases:
-  + actividad concreta
-  + objetivo
+Nuestro objetivo es estudiar la situación de las provincias españolas en relación al mercado de la vivienda. El proyecto se estructura en tres partes análisis: Descriptiva estándard, autocorrelación espacial y clústers con restricciones espaciales. Para la implementación de las diferentes técnicas usaremos `R` y sus librerías. A continuación detallamos cada parte del proceso y luego presentamos el conjunto de datos. Trabajaremos con un nivel de significación del 5%.
+
+Primeramente realizamos un análisis descriptivo de las variables. Este contiene una breve discusión sobre las relaciones entre ellas dejando de lado la dimensión geográfica. Representamos la matriz de correlaciones y presentamos los estadísticos resumen habituales para cada variable.
+
+Seguidamente calculamos los ínidces de autocorrelación espacial habituales. Usamos la I de Moran para describir la autocorrelación espacial global y varios índices locales: Moran local, Getis-Ord y Geary local multiariante. Los representamos gráficamente en un mapa de las provincias.
+
+Utilizamos cinco variables asociadas al año 2022^[El año 2022 es el más reciente en el que todos los datos están disponibles.] y las características geográficas de las provincias, las enuciamos juntamente con su fuente:
+
+ - Datos vectoriales de las provincias, [ArcGis](https://www.arcgis.com/home/item.html?id=83d81d9336c745fd839465beab885ab7)
+ - Número de transacciones de viviendas, [Ministerio de Interior](https://apps.fomento.gob.es/BoletinOnline2/?nivel=2&orden=36000000)
+ - Precio por metro cuadrado del suelo urbano, [Ministerio de Interior](https://apps.fomento.gob.es/BoletinOnline2/?nivel=2&orden=36000000)
+ - Número de ejecuciones hipotecarias, [INE](https://www.ine.es/dyngs/INEbase/operacion.htm?c=Estadistica_C&cid=1254736176993&menu=resultados&idp=1254735576606)
+ - Población, [INE](https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&cid=1254736177012&menu=ultiDatos&idp=1254734710990)
+
 
 \newpage
-# Resultados
+# Análisis descriptivo
+
+Primeramente veamos como es la distribución de las variables. Recogemos los estadísticos resumen habituales en las siguientes tablas:
+
+```{r}
+summarise(df, across(everything(), mean)) %>%
+  bind_rows(
+    summarise(df, across(everything(), median))
+  ) %>%
+  bind_rows(
+    summarise(df, across(everything(), sd))
+  ) %>%
+  bind_rows(
+    summarise(df, across(everything(), function(x) max(x)-min(x)))
+  ) %>% t() %>% matrix(
+    nrow = 6, ncol = 4,
+    dimnames = list(
+      c("Transacciones de viviendas",
+        "Precio del metro cuadrado urbano",
+        "Viviendas principales",
+        "Viviendas secundarias",
+        "Población",
+        "Viviendas en proceso de ejecución hipotecaria"),
+      c("Media", "Mediana", "Desviación típica", "Rango")
+    )
+  ) %>% round(digits = 2) %>%
+  kable(booktabs = TRUE, format = "latex", align = "c",
+        caption = "Estadísticos resumen de las variables") %>%
+  kable_styling(latex_options = c("striped", "hold_position"),
+                full_width = FALSE) %>%
+  footnote(general = "Parque e viviendas en miles, población en miles, precio en euros y el resto en unidades.",
+           general_title = "Unidades de medida:")
+
+```
+
+Parece que la todas las variables presentan asimetría positiva, lo que significa que existen algunas observaciones extremas de valores altos que arrastran la media hacia arriba. Por otro lado la dispersión del número de transacciones, ejecuciones hipotecarias y viviendas principales es notoriamente alto teniendo en cuenta que la población es la variable con mayor desviación típica: En todos estos casos la desviación típica supera a la media y la mediana.
+
+Veamos ahora la correlación pura entre las variables, sin tener en cuenta la dimensión espacial de las mismas. Es aparente que existe una correlación relativamente fuerte entre todas las variables, sin embargo el precio parece estar menos relacionado que el resto. 
+
+```{r, out.width="80%", fig.align='center'}
+#| fig.cap = "Los nombres de las variables se refieren a transacciones de viviendas, 
+#| precio por metro cuadrado urbano, parque de viviendas principales, 
+#| parque de viviendas no principales, población y ejecuciones hipotecarias en curso."
+cor(df) %>% corrplot()
+```
+\newpage
+# Análisis de la autocorrelación espacial
+
+## I de Moran global
+
+```{r}
+d = sf::st_distance(shp) %>% as.matrix(); class(d) = "numeric" # distancias entre provincias
+w = queen_weights(shp) # pesos de dama
+```
+
+Calculamos la I de Moran usando el pauete `ape` con las distancias implementadas por `sf`. Reescalamos el resultado entre -1 y 1 y realizamos la prueba de hipótesis: $H_0:$ La variable se distribuye aleatoriamente en el espacio contra $H_1:$ La variable no se distribuye aleatoriamente en el espacio
+
+Lo hacemos para todas las variables del conjunto de datos:
+
+Para la variable población no podemos rechazar $H_0$ así que el valor ligeramente negativo no es significativo , lo que siguiere una distribución estándard aleatoria.
+
+```{r, echo = TRUE}
+ape::Moran.I(shp$pob, d, scaled = TRUE)[c(1, 4)] # población
+```
+
+En este caso podemos rechazar la distribución aleatoria de las transacciones de vivienda y el valor negativo sugiere cierta tendencia hacia la dispersión.
+
+```{r, echo = TRUE}
+ape::Moran.I(shp$trans, d, scaled = TRUE)[c(1, 4)] # transacciones
+```
+
+La variable precio ajusta un *p-value* aún menor y también es negativo, algo más que el anterior. De modo que el precio tiende a la dispersión espacial ligeramente más que las transacciones.
+
+```{r, echo = TRUE}
+ape::Moran.I(shp$preu, d, scaled = TRUE)[c(1, 4)] # precio
+```
+
+De nuevo obtenemos un resultado parecido para el número de ejecuciones hipotecarias. Parece que están dispersas en una medida menor al precio y mayor a las transacciones.
+
+```{r, echo = TRUE}
+ape::Moran.I(shp$hipo, d, scaled = TRUE)[c(1, 4)] # ejecuciones hipotecarias
+```
+
+La autocorrelación global del número de viviendas principales no es significativa. Es consistente con el resultado obtenido para la poblaciónpuesto que presumiblemente son dos variables relacionadas estrechamente.
+
+```{r, echo = TRUE}
+ape::Moran.I(shp$prin, d, scaled = TRUE)[c(1, 4)] # viviendas principales
+```
+
+En cambio las viviendas no principales sí son significativas y como el resto de variables apunta hacia una tendencia dispersa.
+
+```{r, echo = TRUE}
+ape::Moran.I(shp$nprin/shp$prin, d, scaled = TRUE)[c(1, 4)] # viviendas no principales
+```
+
+En general, la mayoría de las variables presentan un índice de Moran significativo con tendencia a la dispersión. Las variables con mayor índice son aquellas relacionadas más estrechamente con el mercado inmobiliario: Transacciones, precio y viviendas secundarias. Por otro lado las variables más estables como población y viviendas principales no son significativas. Una posible interpretación es que el mercado de la vivienda es selectivo de una forma no fácilmente agrupable. En la sección de análisis clúster con restriciones espaciales estudiaremos esta cuestión en más profundidad.
+
+\newpage
+## I de Moran local
+
+```{r}
+lomo_trans = local_moran(w, shp["trans"])
+lomo_preu = local_moran(w, shp["preu"])
+lomo_prin = local_moran(w, shp["prin"])
+lomo_nprin = local_moran(w, shp["nprin"])
+lomo_pob = local_moran(w, shp["pob"])
+lomo_hipo = local_moran(w, shp["hipo"])
+```
+
+El índice local de Moran es útil para detectar outliers y clústers espaciales. Es univariado, así que acontinuación representamos el ínidice para la variable población, mientras que para el resto los gráficos se encuentran en el annexo.
+
+La interpretación es la siguiente: Las entidades significativas *Low-Low* o *High-High* muestran una provincia con valores bajos o valores altos rodeada de otras provincias con características similares. Se podría tratar de un centro de clúster. Por otro lado las entidaes significativas *High-Low* o *Low-High* representan outliers respecto a sus vecinos y por tanto son localizaciones de interés. 
+
+Veámoslo en la fijura de debajo: Notamos que Madrid y Zaragoza son provincias significativas clasificadas como *High-Low*, lo que significa que su población es significativamente más alta que sus contiguos. Por otra parte, fijándonos en la zona al oeste de éstas vemos que Salamanca, Valladoliz, León, Burgos y Soria están clasificadas como provincias *Low-Low* porqué su población es muy baja y están rodeadas de otras provincias con poca población. Estas últimas son candidatas a centro de clúster en el sentido de población baja puesto que están rodeadas por entidades de características similares y destacan dentro de sus vecinas.
+
+```{r}
+pinta_lisa(shp, lomo_pob, "Mapa de Local Moral de población")
+```
+
+\newpage
+## Getis-Ord local
+
+```{r}
+logo_trans = local_g(w, shp["trans"])
+logo_preu = local_g(w, shp["preu"])
+logo_prin = local_g(w, shp["prin"])
+logo_nprin = local_g(w, shp["nprin"])
+logo_pob = local_g(w, shp["pob"])
+logo_hipo = local_g(w, shp["hipo"])
+```
+
+En cuanto al ínidce de Getis-Ord la idea e interpretación son similares, la diferencia es que este ínidce solo señala categorías *Low-Low* o *High-High* así que la información que se puede extraer del mismo es más limitada.
+
+Veamos un ejemplo con la variable viviendas no principales, los gráficos para el resto de variables se encuentran en el annexo. En este caso el índice identifica que hay más viviendas no principales, en relación con el resto de provincias, en Murcia, Alicante o Albacente. Por contra indica que hay menos viviendas principales hacia el norte, en el País Vasco, parte de Aragón y parte de Castilla y León.
+
+```{r, out.width="85%"}
+pinta_lisa(shp, logo_nprin, "Mapa de Getis-Ord de viviendas no principales")
+```
+\newpage
+## Geary local
+
+El propósito de éste ínidce es el mismo que los dos anteriores. Basándose en la medida para cada provicia y el *spatial lag*^[El lag espacial es la suavización de la medida atendiendo a los vecinos, en un caso simple es la media de la medida sobre la entidad y sus colindantes.] asociado a ésta. De nuevo hay distintas clasificaciones posibles para las observaciones significativas: *Positive* corresponde a provincias con una medida y un *spatial lag* superiores a la media. El concepto es análogo para la categoría *Negative*. Por otra parte tenemos las provincias que no cuya medida no va de la mano con sus vecinos, éstas van al grupo *Undefined*. Finalmente se separan las *Isolated*, aquellas que no tienen vecinos. La definición de vecindad es de suma importancia en casos como el nuesto, con islas. Sin embargo queda fuera del ámbito de este proyecto el estudio de definiciones de vecindad. Veamos un ejemplo, en el annexo hay otras combinaciones de variables:
+
+**Transacciones, precio y población:**
+
+Intuimos que existe cierta relación entre la frecuencia de transacciones y el precio, así como con el número de habitantes de una provincia. Veamos si algunas zonas comparten medidas en cuanto a estas tres variables.
+
+Cuenca es la única que tiene un perfil negativo, es decir está poco poblada y tiene tanto precios como frecuencia de transacciones de viviendas bajas. Este es el caso para Cuenca y sus provincias vecinas. Por otro lado identificamos por la zona del País Vasco y Navarra clasificaciones positivas, también en Málaga. Hasta ahora los resultados tienen cierto sentido en el contexto español: Las provincias en se clasifican como altas y las que no lo están mucho como bajas. Sin embargo notamos que la parte oeste de Castilla y León también ha sido clasificada como alta, algo que a primera vista no esperaríamos. Será necesario indagar más en esta cuestion en investigaciones posteriores. Quizás cambiando la definición de contiguidad, aumentando el número de iteraciones o transformando las variables obtengamos otros resulutados.
+
+```{r, out.width="85%"}
+geary1 = local_multigeary(w, shp[c("trans", "preu", "pob")])
+pinta_lisa(shp, geary1, "Mapa Geary: Transacciones, precio y población")
+```
+
+\newpage
+# Conclusiones
+
+En este trabajo hemos plantado la cuestión de identidicar similitudes entre provincias respecto a medidas de autocorrelación espacial. Para ello hemos utilizado datos de *ArcGis*, el *Ministerio de Interior* y el *INE*. Los hemos procesado utilizando `R` y nos hemos servido de los numerosos recursos recogidos en la bilbligorafía.
+
+Comprobamos que las variables que hemos usado son asiméticas hacia la derecha y observamos una correlación importante entre todas ellas, aunque con el precio notablemente más baja. Hemos constatado que la autocorrelación espacial es significativa a un nivel del 5% para algunas variables como las transacciones de viviendas o el precio de éstas en sentido de dispersión espacial. Por contra lo hemos descartado para otras como la población o el número d eviviendas principales. Finalmente calculamos y representamos los índices de autocorrelación local. Con ello hemos sido capaces de identificar potenciales cabezas de clúster y outliers en diversos sentidos usando índices univariantes y en sentidos complejos empleando un ínidce multivariante.
+
+En resumen, nos hemos familiarizado con los conceptos fundamentales del análisis espacial y hemos aprendido a manejar los datos y librerías más relevantes en `R`. Las próximas direcciones de estudio deberán trabajar sobre estas bases indagando en las definiciones y detalles capaces de mejorar la capacidad del análisis en el ámbito de la *Ciencia de Datos Espacial*.
+
+\newpage
+# Annexo
+
+## Gráficos: Local Moran
+
+```{r, out.width="75%"}
+pinta_lisa(shp, lomo_prin, "Mapa de Local Moran de viviendas principales")
+pinta_lisa(shp, lomo_nprin, "Mapa de Local Moran de viviendas no principales")
+pinta_lisa(shp, lomo_preu, "Mapa de Local Moran de precio")
+pinta_lisa(shp, lomo_trans, "Mapa de Local Moran de transacciones")
+pinta_lisa(shp, lomo_hipo, "Mapa de Local Moran de ejecuciones hipotecarias")
+```
+
+\newpage
+## Gráficos: Getis-Ord
+
+```{r, out.width="75%"}
+pinta_lisa(shp, logo_prin, "Mapa de Getis-Ord de viviendas principales")
+pinta_lisa(shp, logo_pob, "Mapa de Getis-Ord de población")
+pinta_lisa(shp, logo_preu, "Mapa de Getis-Ord de precio")
+pinta_lisa(shp, logo_trans, "Mapa de Getis-Ord de transacciones")
+pinta_lisa(shp, logo_hipo, "Mapa de Getis-Ord de ejecuciones hipotecarias")
+```
+
+\newpage
+## Gráfico: Geary
+
+**Ejecuciones hipotecarias y transacciones:**
+
+```{r, out.width="75%"}
+geary2 = local_multigeary(w, shp[c("hipo", "trans")])
+pinta_lisa(shp, geary2, "Mapa Geary: Ejecuciones hipotecarias y transacciones")
+```
+**Viviendas principales y precio:**
+
+```{r, out.width="75%"}
+geary3 = local_multigeary(w, shp[c("nprin", "preu")])
+pinta_lisa(shp, geary3, "Mapa Geary: Viviendas principales y precio")
+```
+
 
 \newpage
 # Bibligrafía
@@ -74,3 +303,4 @@ Por otra parte comprobamos la veracidad de algunas hipótesis sobre el conjunto 
 - [Autocorrelación espacial local](https://lanselin.github.io/introbook_vol1/CHLISA.html)
 
 - [rgeoda](https://geodacenter.github.io/rgeoda/)
+- [I de Moran](https://mgimond.github.io/es214_support_tutorials/moranI/Mapping_and_Morans.html)
